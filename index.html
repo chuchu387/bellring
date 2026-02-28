@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Bell Ringer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        h1 {
+            color: #fff;
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+        .bell-container {
+            position: relative;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        .bell-container:active {
+            transform: scale(0.95);
+        }
+        .bell {
+            width: 150px;
+            height: 150px;
+            fill: #ffd700;
+            filter: drop-shadow(0 10px 20px rgba(255, 215, 0, 0.3));
+        }
+        .ringing {
+            animation: ring 0.5s ease-in-out;
+        }
+        @keyframes ring {
+            0%, 100% { transform: rotate(0deg); }
+            10% { transform: rotate(15deg); }
+            30% { transform: rotate(-15deg); }
+            50% { transform: rotate(10deg); }
+            70% { transform: rotate(-10deg); }
+        }
+        .instruction {
+            color: #aaa;
+            margin-top: 30px;
+            font-size: 14px;
+            text-align: center;
+            padding: 0 20px;
+        }
+        #permission-btn {
+            background: #ffd700;
+            color: #1a1a2e;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-bottom: 20px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔔 Bell Ringer</h1>
+    <button id="permission-btn">Enable Shake</button>
+    <div class="bell-container" id="bell">
+        <svg class="bell" viewBox="0 0 24 24">
+            <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/>
+        </svg>
+    </div>
+    <p class="instruction">Tap the bell or shake your phone to ring!</p>
+    <script>
+        const bell = document.getElementById('bell');
+        const permissionBtn = document.getElementById('permission-btn');
+        let audioCtx = null;
+        let lastShake = 0;
+        // Create bell sound using Web Audio API
+        function playBellSound() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            // Bell-like tone (around 523 Hz = C5)
+            oscillator.frequency.setValueAtTime(523, audioCtx.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 1.5);
+            
+            // Add some harmonics for richer sound
+            const osc2 = audioCtx.createOscillator();
+            const gain2 = audioCtx.createGain();
+            osc2.connect(gain2);
+            gain2.connect(audioCtx.destination);
+            osc2.frequency.setValueAtTime(780, audioCtx.currentTime);
+            gain2.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1);
+            osc2.start();
+            osc2.stop(audioCtx.currentTime + 1.5);
+            
+            // Envelope
+            gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.5);
+            
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 1.5);
+        }
+        // Ring the bell (visual + sound)
+        function ringBell() {
+            bell.classList.remove('ringing');
+            void bell.offsetWidth; // Trigger reflow
+            bell.classList.add('ringing');
+            playBellSound();
+        }
+        // Touch/Click event
+        bell.addEventListener('click', ringBell);
+        bell.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            ringBell();
+        });
+        // Shake detection
+        let lastX = 0, lastY = 0, lastZ = 0;
+        const shakeThreshold = 15;
+        function handleMotion(e) {
+            const current = e.accelerationIncludingGravity;
+            if (!current) return;
+            const deltaX = Math.abs(lastX - current.x);
+            const deltaY = Math.abs(lastY - current.y);
+            const deltaZ = Math.abs(lastZ - current.z);
+            if ((deltaX > shakeThreshold || deltaY > shakeThreshold || deltaZ > shakeThreshold) 
+                && Date.now() - lastShake > 1000) {
+                lastShake = Date.now();
+                ringBell();
+            }
+            lastX = current.x;
+            lastY = current.y;
+            lastZ = current.z;
+        }
+        // Request permission for iOS 13+ devices
+        if (typeof DeviceMotionEvent !== 'undefined' && 
+            typeof DeviceMotionEvent.requestPermission === 'function') {
+            permissionBtn.style.display = 'block';
+            permissionBtn.addEventListener('click', () => {
+                DeviceMotionEvent.requestPermission()
+                    .then(response => {
+                        if (response === 'granted') {
+                            permissionBtn.style.display = 'none';
+                            window.addEventListener('devicemotion', handleMotion);
+                        }
+                    })
+                    .catch(console.error);
+            });
+        } else {
+            // Non-iOS 13+ devices
+            window.addEventListener('devicemotion', handleMotion);
+        }
+        // Start audio context on first user interaction
+        document.body.addEventListener('click', () => {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }, { once: true });
+    </script>
+</body>
+</html>
